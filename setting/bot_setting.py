@@ -4,7 +4,6 @@
 
 import logging
 import time
-from datetime import date, timedelta, datetime
 from random import randint
 
 import psycopg2
@@ -164,120 +163,15 @@ class BotSetting(PgConnect):
         PgConnect.__init__(self)
         self.tg_token = tg_token
 
-    @staticmethod
-    def next_closest(search_day):
+    def check_anything(self, query_sql):
+        """Проверка всякого в БД.
+        :return boll
         """
-        Расчитать дату дня следующей неделт
-        :param search_day: день недели, дату которогонадо найти на след. неделе
-        :return: дата
-        """
-        today = date.today()
-        from_day = today.isoweekday()
-        different_days = search_day - from_day if from_day < search_day else 7 - from_day + search_day
-        return today + timedelta(days=different_days)
-
-    def next_monday(self):
-        """
-        След. понедельник
-        :return: дата
-        """
-        return date.strftime(self.next_closest(1), '%d.%m.%Y')
-
-    def next_tuesday(self):
-        """
-        След. вторник
-        :return: дата
-        """
-        return date.strftime(self.next_closest(2), '%d.%m.%Y')
-
-    def next_wednesday(self):
-        """
-        След. среда
-        :return: дата
-        """
-        return date.strftime(self.next_closest(3), '%d.%m.%Y')
-
-    def next_thursday(self):
-        """
-        След. четверг
-        :return: дата
-        """
-        return date.strftime(self.next_closest(4), '%d.%m.%Y')
-
-    def next_friday(self):
-        """
-        След. пятница
-        :return: дата
-        """
-        return date.strftime(self.next_closest(5), '%d.%m.%Y')
-
-    def stat_com_prepare_params(self, command_text):
-        """
-        подготовка параметров для команды статистики
-        :param command_text: команда
-        :return: тест статистики
-        """
-
-        needs_month, needs_year = None, None
-        command_text = command_text.split(" ")[1:]
-        commands = dict(zip(command_text[::2], command_text[1::2]))
-
-        if '@' in command_text:
-            command_text = command_text.split('@')[0]
-
-        elif '-all' in command_text:
-            needs_month, needs_year = False, False
-
-        elif commands.get('-y'):
-            month = commands.get('-m') if commands.get('-m') else False
-            year = commands.get('-y')
-            if month and month not in [f'{x}' for x in range(1, 13)]:
-                needs_month, needs_year = 'Error', 'Нет блять такого месяца, говно'
-            elif year not in [f'{x}' for x in range(2018, 2033)]:
-                needs_month, needs_year = 'Error', 'Ну и что ты ввел? ишак'
-            needs_month, needs_year = month, year
-        elif commands.get('-m'):
-            year = commands.get('-y') if commands.get('-y') else datetime.today().year
-            month = commands.get('-m')
-            year_range = [x for x in range(1970, 2033)]
-            month_range = [f'{x}' for x in range(1, 13)]
-            if month not in month_range:
-                needs_month, needs_year = 'Error', 'Нет блять такого месяца, говно'
-            elif year not in year_range:
-                needs_month, needs_year = 'Error', 'Ну и что ты ввел? ишак'
-            needs_month, needs_year = month, year
-
-        elif command_text == [] or command_text == '/statistic':
-            needs_month, needs_year = date.today().month, date.today().year
-
+        query_result = self._pg_execute(query_sql).fetchone()
+        if query_result and query_result[0] == True:
+            return True
         else:
-            text_help = """
-                Примеры:
-                /statistic -all: за все время
-                /statistic -m 7: 7 месяц этого года
-                /statistic -y 2020: За весь 2020 год
-                /statistic -m 4 -y 2020: за 4 месяц 2020 года
-                /statistic -m 4 -y л: ошибка"""
-            needs_month, needs_year = 'Error', f'Хуйня ты ебаная, не правильно кулючи заюзал, {text_help}'
-        return needs_month, needs_year
-
-    def prepare_stat_text(self, dict_movies):
-        """
-        Подготовка текста для вывода статистики
-        :param dict_movies: словарь фильмов
-        :return: тест для отправки в бот
-        """
-        cinema_list = '\n'.join([x['title'] for x in dict_movies])
-        count_movies = len(dict_movies)
-        count_min = sum([x['runtime'] if x['runtime'] else 0 for x in dict_movies])
-        count_hours = f"{count_min // 60} час(а/ов) {count_min % 60} мин."
-        text = f"""
-                Ну`с итого:\n{cinema_list}
-                -------------
-                В сумме на просмотр мы потратили: {count_hours}
-                и посмотрели: {count_movies} фильма
-                """
-        return text
+            return False
 
     def insert_main_phrase(self, text):
         """
@@ -310,11 +204,15 @@ class WorkWithUser(BotSetting):
         """
         Проверка наличия пользователя в БД.
         если отсутствует добавляется.
-        :param username: username пользователя
-        :param first_name: Если в тг указано основное имя
+        :param user: объект пользователя из message
+        :param chat: объект чата из message
         :param full_name: Если в тг указано полное имя
         :return: id пользователя
         """
+
+        if not self.get_duel_status(chat.id):
+            return "Регистрация пользователей на дуэль закрыта."
+
         sql = f"""
             select u.id from users u 
             join public."userProfile" up on up."userId" = u.id
@@ -323,13 +221,21 @@ class WorkWithUser(BotSetting):
         result = self._pg_execute(sql).fetchone()
 
         if not result:
-            result = self.add_user(user, chat)
-        return result[0]
+            self.add_user(user, chat)
+
+        after_reg_msg = u"""
+            Вы зарегитсрированы в мексиканской дуэле в данном чате.
+            Ожидайте начала.
+            """
+        return after_reg_msg
+
+    def get_duel_status(self, chat_id):
+        query_sql = f"""SELECT duelisrunning FROM public."chatIdList" WHERE id = {chat_id}"""
+        return self.check_anything(query_sql)
 
     def add_user(self, user, chat):
         """Добавление нового пользователя."""
 
-        # TODO передавать еще chat.title
         sql = f""" 
             SELECT insert_new_user('{user.username}',
                                    '{user.first_name}',
@@ -342,6 +248,7 @@ class WorkWithUser(BotSetting):
         logging.info(f'В БД добавлен пользователь под ником "{user.username}"')
         return added_user.fetchone()
 
+    # Olds scripts
     def chk_role_user(self, username):
         """
         Проверка ролей пользователя
@@ -426,19 +333,9 @@ class WorkWithUser(BotSetting):
         return f'{main_word[0]}\n'
 
 
-class CommandStart(PgConnect):
+class CommandStart(BotSetting):
     def __init__(self):
-        PgConnect.__init__(self)
-
-    def check_anything(self, query_sql):
-        """Проверка всякого в БД.
-        :return boll
-        """
-        query_result = self._pg_execute(query_sql).fetchone()
-        if query_result:
-            return True
-        else:
-            return False
+        BotSetting.__init__(self)
 
     def check_exist_chat(self, chat_id):
         query_sql = f"""SELECT c."chatName" from public."chatIdList" c where c.id = {chat_id}"""
