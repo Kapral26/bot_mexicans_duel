@@ -1,18 +1,22 @@
 # -*- coding: utf-8 -*-
 from aiogram import Bot, Dispatcher, executor, types
 
-from setting.bot_setting import BotSetting, WorkWithUser, CommandStart, tg_token
+from setting.bot_setting import BotSetting, WorkWithUser, CommandsFunction, tg_token
 
 bot = Bot(token=tg_token, )
 dp = Dispatcher(bot=bot, )
 
 bot_setting = BotSetting()
 work_with_user = WorkWithUser()
-start_commands = CommandStart()
+commands_function = CommandsFunction()
 
 
 # TODO
-# Необходимо ограничить декаратором список возможных команд.
+# 1. Необходимо ограничить декораторам список возможных команд.
+# 2. У каждого оружия может быть обойма, в которой ограниченное количество патронов и необходимо
+# ждать время перезарядки, соответственно не факт что будет удобно пользователю использовать именного
+# его
+# 3. Перед выстрелом проверить а не убит ли тот кто пытается выстрелить.
 
 @dp.message_handler(commands=['help', 'help2'])
 async def send_menu(message: types.Message):
@@ -26,6 +30,8 @@ async def send_menu(message: types.Message):
                     /reg_usr - Зарегистрироваться в боте 
                     /lets_dance - Закрываем регистрацию на дуэль в текущем чате.
                     Запускать может только админимтраторы группы.
+                    /shoot
+                    /aspirine
                     /stop_duel
                     
                     бла бла
@@ -37,7 +43,7 @@ async def send_menu(message: types.Message):
 @dp.message_handler(commands=['start_duel'])
 async def start_duel(message: types.Message):
     # Поприветствовать
-    msg_text = start_commands.start_message(message.chat)
+    msg_text = commands_function.start_message(message.chat)
     await message.reply(msg_text)
 
 
@@ -48,11 +54,26 @@ async def register_user(message: types.Message):
 
 
 @dp.message_handler(commands=['lets_dance'])
-async def register_user(message: types.Message):
+async def start_duel(message: types.Message):
     chat_admins = await bot.get_chat_administrators(message.chat.id)
-    msg = "Lets dance every body."
     if message.from_user.username not in [x.user.username for x in chat_admins]:
-        msg = f"Эта команда не для тебя, собака ты сутулая, да я тебе {message.from_user.username}"
+        msg = f"Эта команда не для тебя, собака ты сутулая, да я тебе {message.from_user.mention}"
+    else:
+        msg = commands_function.lets_dance(message.chat.id)
+    await message.reply(msg)
+
+
+@dp.message_handler(commands=['shoot'])
+async def shoot(message: types.Message):
+    msg = commands_function.shoot_to_this_man(chat_id=message.chat.id,
+                                              who_shoot=message.from_user.username)
+    await message.reply(msg)
+
+
+@dp.message_handler(commands=['aspirin'])
+async def aspirin(message: types.Message):
+    msg = commands_function.aspirine(chat_id=message.chat.id,
+                                     who_shoot=message.from_user.username)
     await message.reply(msg)
 
 

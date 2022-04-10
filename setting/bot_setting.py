@@ -36,39 +36,13 @@ def log_error(func):
     return inner
 
 
-@log_error
-def chk_user(func):
-    """
-    Декоратор для проверки есть ли пользователь в БД
-    """
-
-    def inner(*args, **kwargs):
-        """
-        Проверка пользователя и запись в лог его действия
-        :param args:
-        :param kwargs:
-        :return:
-        """
-        if args[1].update_id:
-            user = args[1].message.from_user.username
-            first_name = args[1].message.from_user.first_name
-            full_name = args[1].message.from_user.full_name
-            chat_id = args[1].message.from_user.id
-            w_user = WorkWithUser()
-            w_user.chk_users(user, first_name, full_name)
-            if '/' in args[1].message.text:
-                logging.info(f'Пользователь: {user}, Запустил комаду: {args[1].message.text}, chat_id: {chat_id}')
-        return func(*args, **kwargs)
-
-    return inner
-
-
 class PgConnect:
     def __init__(self, max_try_connect=0):
         self.__pg_connect = None
         self.max_try_connect = max_try_connect if max_try_connect > -1 else 0
 
-    def pg_connection(self):
+    @staticmethod
+    def pg_connection():
         """
         Подключение к pg
         """
@@ -130,7 +104,8 @@ class PgConnect:
                     self.__pg_connect = self.pg_connection()
                     return True
                 except Exception:
-                    if try_connect >= self.max_try_connect: raise
+                    if try_connect >= self.max_try_connect:
+                        raise
                     time.sleep(10)
         else:
             return False
@@ -167,11 +142,15 @@ class BotSetting(PgConnect):
         """Проверка всякого в БД.
         :return boll
         """
-        query_result = self._pg_execute(query_sql).fetchone()
-        if query_result and query_result[0] == True:
-            return True
-        else:
-            return False
+        try:
+            query_result = self._pg_execute(query_sql).fetchone()
+            if query_result and query_result[0] is True:
+                return True
+            else:
+                return False
+        except Exception:
+            self.rollback_pg()
+            raise
 
     def insert_main_phrase(self, text):
         """
@@ -206,7 +185,6 @@ class WorkWithUser(BotSetting):
         если отсутствует добавляется.
         :param user: объект пользователя из message
         :param chat: объект чата из message
-        :param full_name: Если в тг указано полное имя
         :return: id пользователя
         """
 
@@ -215,9 +193,9 @@ class WorkWithUser(BotSetting):
 
         sql = f"""
             select u.id from users u 
-            join public."userProfile" up on up."userId" = u.id
-            where u."userName" = '{user.username}'
-              and up."chatId" = {chat.id}"""
+            join user_profile up on up.user_id = u.id
+            where u.user_name = '{user.username}'
+              and up.chat_id = {chat.id}"""
         result = self._pg_execute(sql).fetchone()
 
         if not result:
@@ -230,7 +208,7 @@ class WorkWithUser(BotSetting):
         return after_reg_msg
 
     def get_duel_status(self, chat_id):
-        query_sql = f"""SELECT duelisrunning FROM public."chatIdList" WHERE id = {chat_id}"""
+        query_sql = f"""SELECT duelisrunning FROM chat_list WHERE id = {chat_id}"""
         return self.check_anything(query_sql)
 
     def add_user(self, user, chat):
@@ -333,12 +311,12 @@ class WorkWithUser(BotSetting):
         return f'{main_word[0]}\n'
 
 
-class CommandStart(BotSetting):
+class CommandsFunction(BotSetting):
     def __init__(self):
         BotSetting.__init__(self)
 
     def check_exist_chat(self, chat_id):
-        query_sql = f"""SELECT c."chatName" from public."chatIdList" c where c.id = {chat_id}"""
+        query_sql = f"""SELECT c.chat_name from chat_list c where c.id = {chat_id}"""
         return self.check_anything(query_sql)
 
     def start_message(self, chat):
@@ -360,6 +338,19 @@ class CommandStart(BotSetting):
 
         return msg_txt
 
+    def lets_dance(self, chat_id):
+        query_sql = f"""UPDATE chat_list SET duelisrunning=false WHERE id={chat_id}"""
+        self._pg_execute(query_sql, commit=True)
+        return "Да начнется дуэль! Ебаште друг друга, но только в чате."
 
-if __name__ == '__main__':
+    def shoot_to_this_man(self, chat_id, who_shoot):
+        query_sql = f"SELECT shoot_to_this_man({chat_id}, '{who_shoot}');"
+        return self._pg_execute(query_sql).fetchone()[0]
+
+    def aspirine(self, chat_id, who_shoot):
+        query_sql = f"SELECT self_heals({chat_id}, '{who_shoot}');"
+        return self._pg_execute(query_sql).fetchone()[0]
+
+
+if __name__ == "__main__":
     BotSetting().pg_connect()
