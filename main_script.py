@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from aiogram import Bot, Dispatcher, executor, types
+from aiogram.types import ParseMode
 
 from setting.bot_setting import BotSetting, WorkWithUser, CommandsFunction, tg_token
 
@@ -16,7 +17,6 @@ commands_function = CommandsFunction()
 # 2. У каждого оружия может быть обойма, в которой ограниченное количество патронов и необходимо
 # ждать время перезарядки, соответственно не факт что будет удобно пользователю использовать именного
 # его
-# 3. Перед выстрелом проверить а не убит ли тот кто пытается выстрелить.
 
 @dp.message_handler(commands=['help', 'help2'])
 async def send_menu(message: types.Message):
@@ -67,21 +67,25 @@ async def start_duel(message: types.Message):
 async def shoot(message: types.Message):
     msg = commands_function.shoot_to_this_man(chat_id=message.chat.id,
                                               who_shoot=message.from_user.username)
-    await message.reply(msg)
+    msg = msg.replace(";", "\n").replace("_", "\\_")#.replace("*", "\\*").replace("[", "\\[").replace("`", "\\`")
+    try:
+        await message.reply(msg, parse_mode=ParseMode.MARKDOWN)
+    except Exception as err:
+        await message.reply(err)
 
 
-@dp.message_handler(commands=['aspirin'])
+@dp.message_handler(commands=['aspirin', 'aspirine'])
 async def aspirin(message: types.Message):
     msg = commands_function.aspirine(chat_id=message.chat.id,
                                      who_shoot=message.from_user.username)
     await message.reply(msg)
 
 
-@dp.message_handler(content_types=types.ContentType.TEXT)
-async def do_echo(message: types.Message):
-    text = message.text
-    if text and not text.startswith('/'):
-        await message.reply(text=text)
+# @dp.message_handler(content_types=types.ContentType.TEXT)
+# async def do_echo(message: types.Message):
+#     text = message.text
+#     if text and not text.startswith('/'):
+#         await message.reply(text=text)
 
 
 def run():

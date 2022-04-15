@@ -144,7 +144,7 @@ class BotSetting(PgConnect):
         """
         try:
             query_result = self._pg_execute(query_sql).fetchone()
-            if query_result and query_result[0] is True:
+            if query_result:
                 return True
             else:
                 return False
@@ -196,6 +196,7 @@ class WorkWithUser(BotSetting):
             join user_profile up on up.user_id = u.id
             where u.user_name = '{user.username}'
               and up.chat_id = {chat.id}"""
+
         result = self._pg_execute(sql).fetchone()
 
         if not result:
@@ -208,8 +209,9 @@ class WorkWithUser(BotSetting):
         return after_reg_msg
 
     def get_duel_status(self, chat_id):
-        query_sql = f"""SELECT duelisrunning FROM chat_list WHERE id = {chat_id}"""
-        return self.check_anything(query_sql)
+
+        query_sql = f"""SELECT chk_duel_status({chat_id})"""
+        return self._pg_execute(query_sql).fetchone()[0]
 
     def add_user(self, user, chat):
         """Добавление нового пользователя."""
@@ -339,17 +341,16 @@ class CommandsFunction(BotSetting):
         return msg_txt
 
     def lets_dance(self, chat_id):
-        query_sql = f"""UPDATE chat_list SET duelisrunning=false WHERE id={chat_id}"""
-        self._pg_execute(query_sql, commit=True)
-        return "Да начнется дуэль! Ебаште друг друга, но только в чате."
+        query_sql = f"SELECT lets_dance({chat_id});"
+        return self._pg_execute(query_sql, commit=True).fetchone()[0]
 
     def shoot_to_this_man(self, chat_id, who_shoot):
         query_sql = f"SELECT shoot_to_this_man({chat_id}, '{who_shoot}');"
-        return self._pg_execute(query_sql).fetchone()[0]
+        return self._pg_execute(query_sql, commit=True).fetchone()[0]
 
     def aspirine(self, chat_id, who_shoot):
         query_sql = f"SELECT self_heals({chat_id}, '{who_shoot}');"
-        return self._pg_execute(query_sql).fetchone()[0]
+        return self._pg_execute(query_sql, commit=True).fetchone()[0]
 
 
 if __name__ == "__main__":
